@@ -1,3 +1,28 @@
+export interface EscrowQrData {
+  escrowId: number;
+  contractId: string;
+}
+
+export function buildEscrowQrString(data: EscrowQrData): string {
+  return JSON.stringify(data);
+}
+
+export function parseEscrowQrString(str: string): EscrowQrData | null {
+  try {
+    const parsed = JSON.parse(str);
+    if (
+      typeof parsed.escrowId === "number" &&
+      typeof parsed.contractId === "string"
+    ) {
+      return parsed as EscrowQrData;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Legacy SEP-7 helpers kept for reference if needed later.
 export interface Sep7PayParams {
   destination: string;
   amount: string;

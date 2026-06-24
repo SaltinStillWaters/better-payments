@@ -5,14 +5,15 @@ import { ConnectButton } from "@/components/ConnectButton";
 import { BalanceDisplay } from "@/components/BalanceDisplay";
 import { SellerPanel } from "@/components/SellerPanel";
 import { BuyerPanel } from "@/components/BuyerPanel";
-import { useFreighter } from "@/hooks/useFreighter";
+import { EventLog } from "@/components/EventLog";
+import { useStellarWallet } from "@/hooks/useStellarWallet";
 import { NETWORK_PASSPHRASE } from "@/lib/stellar";
 
 type Mode = "seller" | "buyer";
 
 export default function Home() {
   const [mode, setMode] = useState<Mode>("seller");
-  const { error, network, connected } = useFreighter();
+  const { error, network, connected } = useStellarWallet();
 
   const networkMismatch =
     connected && network && network !== NETWORK_PASSPHRASE;
@@ -25,7 +26,7 @@ export default function Home() {
             Better Payments
           </h1>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Fast XLM payments on Stellar Testnet
+            Escrow payments on Stellar Testnet
           </p>
         </div>
         <ConnectButton />
@@ -39,7 +40,7 @@ export default function Home() {
 
         {networkMismatch && (
           <div className="w-full rounded-lg border border-amber-200 bg-amber-50 p-3 text-center text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
-            Please switch Freighter to Testnet.
+            Please switch your wallet to Testnet.
           </div>
         )}
       </header>
@@ -71,10 +72,12 @@ export default function Home() {
         </div>
 
         {mode === "seller" ? <SellerPanel /> : <BuyerPanel />}
+
+        <EventLog />
       </main>
 
       <footer className="mt-8 text-center text-xs text-zinc-400 dark:text-zinc-600">
-        Connected to Stellar Testnet via Freighter
+        Connected to Stellar Testnet via multi-wallet kit
       </footer>
     </div>
   );

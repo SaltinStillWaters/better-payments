@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useFreighter } from "@/hooks/useFreighter";
+import { useStellarWallet } from "@/hooks/useStellarWallet";
 import { getBalance } from "@/lib/balance";
 import { fundWithFriendbot } from "@/lib/stellar";
 
 export function BalanceDisplay() {
-  const { address } = useFreighter();
+  const { address } = useStellarWallet();
   const [balance, setBalance] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,7 +119,7 @@ export function BalanceDisplay() {
 
       {!isUnfunded && (
         <button
-          onClick={handleRefresh}
+          onClick={() => void handleRefresh()}
           disabled={loading}
           className="text-xs text-blue-600 hover:underline disabled:opacity-50"
         >

@@ -1,14 +1,14 @@
 "use client";
 
-import { useFreighter } from "@/hooks/useFreighter";
+import { useStellarWallet } from "@/hooks/useStellarWallet";
 import { truncateAddress } from "@/lib/stellar";
 
 export function ConnectButton() {
-  const { connected, address, loading, connect, disconnect } = useFreighter();
+  const { connected, address, loading, connect, disconnect } = useStellarWallet();
 
   const handleClick = async () => {
     if (connected) {
-      disconnect();
+      await disconnect();
       return;
     }
 
@@ -33,7 +33,7 @@ export function ConnectButton() {
           {address ? truncateAddress(address) : "Connected"}
         </>
       ) : (
-        "Connect Freighter"
+        "Connect Wallet"
       )}
     </button>
   );

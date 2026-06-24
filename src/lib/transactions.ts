@@ -1,16 +1,34 @@
 import {
   Asset,
   BASE_FEE,
+  Contract,
+  nativeToScVal,
   Operation,
+  rpc,
+  scValToNative,
   StrKey,
   TransactionBuilder,
+  xdr,
 } from "@stellar/stellar-sdk";
-import { horizon, NETWORK_PASSPHRASE } from "./stellar";
+import {
+  ESCROW_CONTRACT_ID,
+  horizon,
+  NETWORK_PASSPHRASE,
+  sorobanRpc,
+  xlmToStroops,
+} from "./stellar";
 
 export interface SubmitResult {
   hash: string;
   ledger: number;
 }
+
+export interface SorobanSubmitResult {
+  hash: string;
+  result?: unknown;
+}
+
+// Classic Stellar helpers (kept for account funding)
 
 export async function buildPaymentTx(
   source: string,
@@ -49,7 +67,6 @@ export async function submitTransaction(
   );
 
   const result = await horizon.submitTransaction(transaction);
-
   const hash = result.hash;
   const ledger = result.ledger;
 
@@ -84,4 +101,198 @@ export function parseHorizonError(error: unknown): string {
   }
 
   return "An unexpected error occurred.";
+}
+
+// Soroban escrow helpers
+
+function getContract(): Contract {
+  if (!ESCROW_CONTRACT_ID) {
+    throw new Error("Escrow contract ID is not configured");
+  }
+  return new Contract(ESCROW_CONTRACT_ID);
+}
+
+function addressToScVal(address: string): xdr.ScVal {
+  return nativeToScVal(address, { type: "address" });
+}
+
+export async function buildContractCall(
+  sourceAddress: string,
+  method: string,
+  args: xdr.ScVal[]
+): Promise<string> {
+  const contract = getContract();
+  const account = await sorobanRpc.getAccount(sourceAddress);
+
+  const transaction = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(contract.call(method, ...args))
+    .setTimeout(180)
+    .build();
+
+  const simulation = await sorobanRpc.simulateTransaction(transaction);
+
+  if (rpc.Api.isSimulationError(simulation)) {
+    throw new Error(`Simulation failed: ${simulation.error}`);
+  }
+
+  const prepared = rpc.assembleTransaction(transaction, simulation).build();
+  return prepared.toXDR();
+}
+
+export async function submitSorobanTransaction(
+  signedXdr: string
+): Promise<SorobanSubmitResult> {
+  const transaction = TransactionBuilder.fromXDR(
+    signedXdr,
+    NETWORK_PASSPHRASE
+  );
+
+  const response = await sorobanRpc.sendTransaction(transaction);
+
+  if (response.status === "ERROR") {
+    throw new Error(`Transaction submission failed: ${response.errorResult}`);
+  }
+
+  let status = await sorobanRpc.getTransaction(response.hash);
+  while (status.status === "NOT_FOUND") {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    status = await sorobanRpc.getTransaction(response.hash);
+  }
+
+  if (status.status === "SUCCESS") {
+    return {
+      hash: response.hash,
+      result: status.returnValue
+        ? scValToNative(status.returnValue)
+        : undefined,
+    };
+  }
+
+  throw new Error(`Transaction failed with status: ${status.status}`);
+}
+
+export async function buildCreateEscrowTx(
+  source: string,
+  seller: string,
+  buyer: string,
+  amountXlm: string,
+  memo: string
+): Promise<string> {
+  const args = [
+    addressToScVal(seller),
+    addressToScVal(buyer),
+    nativeToScVal(xlmToStroops(amountXlm), { type: "i128" }),
+    nativeToScVal(memo, { type: "string" }),
+  ];
+  return buildContractCall(source, "create_escrow", args);
+}
+
+export async function buildFundEscrowTx(
+  source: string,
+  id: number
+): Promise<string> {
+  const args = [nativeToScVal(id, { type: "u64" })];
+  return buildContractCall(source, "fund_escrow", args);
+}
+
+export async function buildReleaseEscrowTx(
+  source: string,
+  id: number
+): Promise<string> {
+  const args = [nativeToScVal(id, { type: "u64" })];
+  return buildContractCall(source, "release_escrow", args);
+}
+
+export interface EscrowState {
+  id: number;
+  seller: string;
+  buyer: string;
+  amount: string;
+  memo: string;
+  status: { tag: string; values?: unknown[] } | string;
+  created_at: number;
+}
+
+export async function getEscrowState(id: number): Promise<EscrowState | null> {
+  const contract = getContract();
+  const args = [nativeToScVal(id, { type: "u64" })];
+
+  // Build a read-only transaction using a throwaway source account.
+  // The account only needs a valid format; it does not need to exist for simulation.
+  const kp = StrKey.encodeEd25519PublicKey(
+    Buffer.alloc(32)
+  ) as string;
+  const account = await sorobanRpc.getAccount(kp).catch(() => ({
+    accountId: () => kp,
+    sequenceNumber: "0",
+  }));
+
+  const tx = new TransactionBuilder(account as never, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(contract.call("get_escrow", ...args))
+    .setTimeout(0)
+    .build();
+
+  const simulation = await sorobanRpc.simulateTransaction(tx);
+
+  if (
+    rpc.Api.isSimulationSuccess(simulation) &&
+    simulation.result &&
+    simulation.result.retval
+  ) {
+    const native = scValToNative(simulation.result.retval) as Record<
+      string,
+      unknown
+    > | null;
+    if (!native) return null;
+
+    return {
+      id: Number(native.id),
+      seller: native.seller as string,
+      buyer: native.buyer as string,
+      amount: (native.amount as bigint).toString(),
+      memo: native.memo as string,
+      status: native.status as EscrowState["status"],
+      created_at: Number(native.created_at),
+    };
+  }
+
+  return null;
+}
+
+export function parseContractError(error: unknown): string {
+  if (error instanceof Error) {
+    const message = error.message;
+
+    if (message.includes("EscrowNotFound")) {
+      return "Escrow not found.";
+    }
+    if (message.includes("InvalidAmount")) {
+      return "Invalid escrow amount.";
+    }
+    if (message.includes("Unauthorized")) {
+      return "You are not authorized to perform this action.";
+    }
+    if (message.includes("AlreadyFunded")) {
+      return "This escrow has already been funded.";
+    }
+    if (message.includes("AlreadyReleased")) {
+      return "This escrow has already been released.";
+    }
+    if (message.includes("NotFunded")) {
+      return "This escrow must be funded before it can be released.";
+    }
+    if (message.includes("Simulation failed")) {
+      return message.replace("Simulation failed: ", "");
+    }
+
+    return message;
+  }
+
+  return "An unexpected contract error occurred.";
 }

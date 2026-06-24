@@ -20,6 +20,9 @@
 # production
 /build
 
+# soroban contract build artifacts
+/contract/target
+
 # misc
 .DS_Store
 *.pem

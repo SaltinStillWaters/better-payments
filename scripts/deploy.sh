@@ -39,7 +39,7 @@ cargo build --target wasm32v1-none --release
 WASM="$ROOT_DIR/contracts/target/wasm32v1-none/release/escrow.wasm"
 
 # Generate or ensure a funded deployer identity.
-if ! stellar keys address escrow-deployer --network testnet >/dev/null 2>&1; then
+if ! stellar keys address escrow-deployer >/dev/null 2>&1; then
   echo "Creating and funding deployer identity..."
   stellar keys generate escrow-deployer --network testnet --fund
 fi
@@ -48,15 +48,28 @@ echo "Deploying contract..."
 CONTRACT_ID=$(stellar contract deploy \
   --wasm "$WASM" \
   --source escrow-deployer \
+  --network testnet)
+
+echo ""
+echo "Deployed escrow contract: $CONTRACT_ID"
+echo ""
+
+# The contract uses an explicit initialize() function (not a constructor),
+# so initialization is a separate invocation. The admin must match the
+# --source key so initialize()'s require_auth is satisfied.
+echo "Initializing contract..."
+stellar contract invoke \
+  --id "$CONTRACT_ID" \
+  --source escrow-deployer \
   --network testnet \
   -- \
   initialize \
   --admin "$ADMIN_ADDRESS" \
   --timeout_seconds "$ESCROW_TIMEOUT_SECONDS" \
-  --xlm_sac_address "$TOKEN_ADDRESS")
+  --xlm_sac_address "$TOKEN_ADDRESS"
 
 echo ""
-echo "Deployed escrow contract: $CONTRACT_ID"
+echo "Contract initialized (admin=$ADMIN_ADDRESS, timeout=${ESCROW_TIMEOUT_SECONDS}s)"
 echo ""
 
 # Update .env.local with the new contract ID.

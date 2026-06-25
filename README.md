@@ -8,8 +8,8 @@ A production-grade Next.js dapp for **escrow-based XLM payments** on the Stellar
 
 The Soroban escrow contract source lives in [`contracts/src/lib.rs`](contracts/src/lib.rs). A build is deployed to Stellar Testnet:
 
-- **Contract ID**: `CBBRNOCEH2BT2BOJK3OXBLJOVMMCKQ33JXUNC4ITTQH3NWUXMEMM45O6`
-- **Explorer**: https://stellar.expert/explorer/testnet/contract/CBBRNOCEH2BT2BOJK3OXBLJOVMMCKQ33JXUNC4ITTQH3NWUXMEMM45O6
+- **Contract ID**: `CDQON4SVEDVMOPJRNM7ISFHVZ3HG64M4XYRO4HWN3ALYMFEZXI6KUTMD`
+- **Explorer**: https://stellar.expert/explorer/testnet/contract/CDQON4SVEDVMOPJRNM7ISFHVZ3HG64M4XYRO4HWN3ALYMFEZXI6KUTMD
 - **Network**: Testnet (`Test SDF Network ; September 2015`)
 
 This ID is also set as `NEXT_PUBLIC_ESCROW_CONTRACT_ID` in `.env.local.example`. To deploy your own build (e.g. after editing the contract or following a testnet reset), run `pnpm contract:deploy` — see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — which redeploys, runs `initialize`, and rewrites this ID in `.env.local`.

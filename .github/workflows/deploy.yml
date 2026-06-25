@@ -28,13 +28,13 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: contract
+          workspaces: contracts
 
       - name: Install Stellar CLI
         run: cargo install --locked stellar-cli --features opt
 
       - name: Build contract
-        working-directory: contract
+        working-directory: contracts
         run: cargo build --target wasm32v1-none --release
 
       - name: Deploy contract
@@ -48,7 +48,7 @@ jobs:
           echo "$STELLAR_ESCROW_DEPLOYER_KEY" > deployer.txt
           stellar keys add escrow-deployer --secret-key-file deployer.txt --network testnet
           CONTRACT_ID=$(stellar contract deploy \
-            --wasm contract/target/wasm32v1-none/release/escrow.wasm \
+            --wasm contracts/target/wasm32v1-none/release/escrow.wasm \
             --source escrow-deployer \
             --network testnet \
             -- \

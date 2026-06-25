@@ -40,7 +40,7 @@ The script (`scripts/deploy.sh`):
 ### Manual deployment
 
 ```bash
-cd contract
+cd contracts
 cargo build --target wasm32v1-none --release
 
 stellar keys generate escrow-deployer --network testnet --fund
@@ -95,7 +95,7 @@ docker compose up --build
 ## Verification checklist
 
 ```bash
-cd contract && cargo test && cargo build --target wasm32v1-none --release
+cd contracts && cargo test && cargo build --target wasm32v1-none --release
 cd .. && pnpm install && pnpm format:check && pnpm lint && pnpm test && pnpm build
 pnpm contract:deploy   # requires ADMIN_ADDRESS in .env.local
 ```

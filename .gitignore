@@ -21,7 +21,7 @@
 /build
 
 # soroban contract build artifacts
-/contract/target
+/contracts/target
 
 # misc
 .DS_Store

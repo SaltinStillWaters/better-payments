@@ -4,6 +4,16 @@ A production-grade Next.js dapp for **escrow-based XLM payments** on the Stellar
 
 > Configured for **Stellar Testnet** by default. All network endpoints and the contract ID are environment-driven, so migrating to another network is a matter of `.env` values.
 
+## Deployed Contract (Testnet)
+
+The Soroban escrow contract source lives in [`contracts/src/lib.rs`](contracts/src/lib.rs). A build is deployed to Stellar Testnet:
+
+- **Contract ID**: `CBBRNOCEH2BT2BOJK3OXBLJOVMMCKQ33JXUNC4ITTQH3NWUXMEMM45O6`
+- **Explorer**: https://stellar.expert/explorer/testnet/contract/CBBRNOCEH2BT2BOJK3OXBLJOVMMCKQ33JXUNC4ITTQH3NWUXMEMM45O6
+- **Network**: Testnet (`Test SDF Network ; September 2015`)
+
+This ID is also set as `NEXT_PUBLIC_ESCROW_CONTRACT_ID` in `.env.local.example`. To deploy your own build (e.g. after editing the contract or following a testnet reset), run `pnpm contract:deploy` — see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — which redeploys, runs `initialize`, and rewrites this ID in `.env.local`.
+
 ## Features
 
 - **Multi-wallet support**: Freighter, LOBSTR, xBull, and Albedo (via Stellar Wallets Kit), with silent reconnect persisted across sessions.
@@ -146,7 +156,7 @@ See [docs/DEMO.md](docs/DEMO.md) for the full walkthrough.
 
 ```bash
 # Contract
-cd contract && cargo test
+cd contracts && cargo test
 
 # Frontend
 pnpm test
@@ -165,7 +175,7 @@ pnpm contract:deploy
 
 ```
 better-payments/
-├── contract/              # Rust Soroban escrow contract
+├── contracts/             # Rust Soroban escrow contract
 │   ├── src/lib.rs         # Contract logic
 │   ├── src/test.rs        # Unit/integration tests
 │   └── fuzz/              # cargo-fuzz target

@@ -3,7 +3,7 @@ out/
 build/
 node_modules/
 coverage/
-contract/target/
+contracts/target/
 test_snapshots/
 pnpm-lock.yaml
 *.min.js

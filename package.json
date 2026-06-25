@@ -13,8 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "contract:build": "cd contract && cargo build --target wasm32v1-none --release",
-    "contract:test": "cd contract && cargo test",
+    "contract:build": "cd contracts && cargo build --target wasm32v1-none --release",
+    "contract:test": "cd contracts && cargo test",
     "contract:deploy": "bash scripts/deploy.sh",
     "prepare": "husky"
   },

@@ -33,10 +33,10 @@ if [[ -z "$TOKEN_ADDRESS" ]]; then
 fi
 
 echo "Building escrow contract..."
-cd "$ROOT_DIR/contract"
+cd "$ROOT_DIR/contracts"
 cargo build --target wasm32v1-none --release
 
-WASM="$ROOT_DIR/contract/target/wasm32v1-none/release/escrow.wasm"
+WASM="$ROOT_DIR/contracts/target/wasm32v1-none/release/escrow.wasm"
 
 # Generate or ensure a funded deployer identity.
 if ! stellar keys address escrow-deployer --network testnet >/dev/null 2>&1; then

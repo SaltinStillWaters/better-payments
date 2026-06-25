@@ -37,7 +37,7 @@ flowchart TB
 
 ### Layers
 
-- **Contract layer** (`contract/src/lib.rs`): the escrow state machine and all fund custody. It never trusts the client — every state-changing method authenticates the relevant party and validates the current status.
+- **Contract layer** (`contracts/src/lib.rs`): the escrow state machine and all fund custody. It never trusts the client — every state-changing method authenticates the relevant party and validates the current status.
 - **State layer** (`src/store/`): `walletStore` persists wallet identity to `localStorage` for silent reconnect; `escrowStore` caches escrows by ID and tracks pending/optimistic status.
 - **UI/hook layer** (`src/components/`, `src/hooks/`, `src/lib/`): hooks orchestrate wallet, transactions, and event polling; `lib/transactions.ts` builds, simulates, signs, and submits Soroban operations; components render the lifecycle.
 - **DevOps layer** (`.github/`, `scripts/`, `Dockerfile`): CI, deploy automation, containerization, and pre-commit hooks.

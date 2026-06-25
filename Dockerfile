@@ -18,13 +18,13 @@ RUN rustup target add wasm32v1-none
 WORKDIR /app
 
 # Install pnpm and frontend dependencies.
-RUN corepack enable && corepack prepare pnpm@9 --activate
+RUN corepack enable && corepack prepare pnpm@11.5.3 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 # Copy contract source and build WASM.
-COPY contract/ ./contract/
-RUN cd contract && cargo build --target wasm32v1-none --release
+COPY contracts/ ./contracts/
+RUN cd contracts && cargo build --target wasm32v1-none --release
 
 # Copy frontend source and build.
 COPY . .

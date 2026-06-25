@@ -22,14 +22,14 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: contract
+          workspaces: contracts
 
       - name: Run contract tests
-        working-directory: contract
+        working-directory: contracts
         run: cargo test
 
       - name: Build contract WASM
-        working-directory: contract
+        working-directory: contracts
         run: cargo build --target wasm32v1-none --release
 
   frontend:

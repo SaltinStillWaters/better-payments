@@ -2,14 +2,13 @@
 
 import { useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
+import { Copy, Check } from "lucide-react";
 import { useStellarWallet } from "@/hooks/useStellarWallet";
 import { buildEscrowQrString } from "@/lib/qr";
-import {
-  buildCreateEscrowTx,
-  parseContractError,
-  submitSorobanTransaction,
-} from "@/lib/transactions";
+import { buildCreateEscrowTx } from "@/lib/transactions";
 import { ESCROW_CONTRACT_ID } from "@/lib/stellar";
+import { useTransaction } from "@/hooks/useTransaction";
+import { Card } from "./Card";
 import { TransactionStatus } from "./TransactionStatus";
 
 export function SellerPanel() {
@@ -17,50 +16,59 @@ export function SellerPanel() {
   const [buyer, setBuyer] = useState("");
   const [amount, setAmount] = useState("");
   const [memo, setMemo] = useState("");
+  const [arbitrator, setArbitrator] = useState("");
   const [escrowId, setEscrowId] = useState<number | null>(null);
-  const [status, setStatus] = useState<
-    "idle" | "building" | "signing" | "submitting" | "success" | "error"
-  >("idle");
-  const [hash, setHash] = useState<string | undefined>(undefined);
-  const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const {
+    status,
+    hash,
+    error: txError,
+    execute,
+    reset,
+  } = useTransaction(sign, {
+    successMessage: "Escrow created",
+  });
+
+  const isBusy =
+    status === "building" || status === "signing" || status === "submitting";
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!address || !buyer || !amount) return;
 
-    setStatus("building");
-    setError(null);
-    setHash(undefined);
+    reset();
     setEscrowId(null);
 
-    try {
-      const xdr = await buildCreateEscrowTx(address, address, buyer, amount, memo);
-      setStatus("signing");
-      const signedXdr = await sign(xdr);
-      setStatus("submitting");
-      const result = await submitSorobanTransaction(signedXdr);
-      setHash(result.hash);
+    const result = await execute(async () => {
+      const xdr = await buildCreateEscrowTx(
+        address,
+        address,
+        buyer,
+        amount,
+        memo,
+        arbitrator || undefined
+      );
+      return xdr;
+    });
 
+    if (result) {
       const returnedId =
         typeof result.result === "bigint"
           ? Number(result.result)
           : Number(result.result);
-      setEscrowId(returnedId);
-      setStatus("success");
-    } catch (err: unknown) {
-      if (err instanceof Error && err.message.includes("rejected")) {
-        setError("Transaction was rejected in wallet.");
-      } else {
-        setError(parseContractError(err));
+      if (!Number.isNaN(returnedId)) {
+        setEscrowId(returnedId);
       }
-      setStatus("error");
     }
   };
 
   const handleCopy = async () => {
     if (escrowId === null || !ESCROW_CONTRACT_ID) return;
-    const qrData = buildEscrowQrString({ escrowId, contractId: ESCROW_CONTRACT_ID });
+    const qrData = buildEscrowQrString({
+      escrowId,
+      contractId: ESCROW_CONTRACT_ID,
+    });
     await navigator.clipboard.writeText(qrData);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -68,11 +76,11 @@ export function SellerPanel() {
 
   if (!address) {
     return (
-      <div className="rounded-xl border border-zinc-200 bg-white p-6 text-center shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <Card className="text-center">
         <p className="text-zinc-600 dark:text-zinc-400">
           Connect your wallet to create an escrow payment request.
         </p>
-      </div>
+      </Card>
     );
   }
 
@@ -82,7 +90,7 @@ export function SellerPanel() {
       : null;
 
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <Card>
       <h2 className="mb-4 text-lg font-semibold">Create Escrow</h2>
 
       <form onSubmit={handleCreate} className="flex flex-col gap-4">
@@ -100,7 +108,7 @@ export function SellerPanel() {
             value={buyer}
             onChange={(e) => setBuyer(e.target.value)}
             placeholder="G..."
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800"
+            className="min-h-[44px] w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800"
           />
         </div>
 
@@ -120,7 +128,7 @@ export function SellerPanel() {
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             placeholder="10"
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800"
+            className="min-h-[44px] w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800"
           />
         </div>
 
@@ -138,20 +146,37 @@ export function SellerPanel() {
             value={memo}
             onChange={(e) => setMemo(e.target.value)}
             placeholder="Invoice #123"
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800"
+            className="min-h-[44px] w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800"
+          />
+        </div>
+
+        <div>
+          <label
+            htmlFor="arbitrator"
+            className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+          >
+            Arbitrator (optional)
+          </label>
+          <input
+            id="arbitrator"
+            type="text"
+            value={arbitrator}
+            onChange={(e) => setArbitrator(e.target.value)}
+            placeholder="G..."
+            className="min-h-[44px] w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800"
           />
         </div>
 
         <button
           type="submit"
-          disabled={status !== "idle" && status !== "error" && status !== "success"}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          disabled={isBusy}
+          className="min-h-[44px] rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
         >
-          Create Escrow
+          {isBusy ? "Creating..." : "Create Escrow"}
         </button>
       </form>
 
-      <TransactionStatus status={status} hash={hash} error={error} />
+      <TransactionStatus status={status} hash={hash} error={txError} />
 
       {qrValue && (
         <div className="mt-6 flex flex-col items-center gap-3">
@@ -172,14 +197,22 @@ export function SellerPanel() {
               <button
                 type="button"
                 onClick={handleCopy}
-                className="rounded-lg border border-zinc-300 px-3 py-2 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+                className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-zinc-300 px-3 py-2 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
               >
-                {copied ? "Copied!" : "Copy"}
+                {copied ? (
+                  <>
+                    <Check className="h-3 w-3" /> Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3 w-3" /> Copy
+                  </>
+                )}
               </button>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </Card>
   );
 }

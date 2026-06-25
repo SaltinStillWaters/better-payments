@@ -1,5 +1,15 @@
 import { Horizon, Networks, rpc } from "@stellar/stellar-sdk";
 
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(
+      `Missing required environment variable: ${name}. See .env.local.example`
+    );
+  }
+  return value;
+}
+
 export const NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK || "testnet";
 
 export const HORIZON_URL =
@@ -18,9 +28,15 @@ export const FRIENDBOT_URL =
 export const ESCROW_CONTRACT_ID =
   process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ID || "";
 
-export const XLM_SAC_ADDRESS =
-  process.env.NEXT_PUBLIC_XLM_SAC_ADDRESS ||
+export const TOKEN_ADDRESS =
+  process.env.NEXT_PUBLIC_TOKEN_ADDRESS ||
   "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
+
+// Validate required public env vars at module load so the app fails fast.
+if (typeof window !== "undefined") {
+  // Only validate in the browser; build-time should not require them.
+  requireEnv("NEXT_PUBLIC_ESCROW_CONTRACT_ID");
+}
 
 export const horizon = new Horizon.Server(HORIZON_URL, {
   allowHttp: HORIZON_URL.startsWith("http://"),

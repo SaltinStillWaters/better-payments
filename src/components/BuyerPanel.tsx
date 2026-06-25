@@ -1,18 +1,24 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStellarWallet } from "@/hooks/useStellarWallet";
 import { parseEscrowQrString } from "@/lib/qr";
 import {
   buildFundEscrowTx,
   buildReleaseEscrowTx,
+  buildRefundEscrowTx,
+  buildDisputeEscrowTx,
+  buildResolveDisputeTx,
   EscrowState,
   getEscrowState,
-  parseContractError,
-  submitSorobanTransaction,
 } from "@/lib/transactions";
 import { stroopsToXlm } from "@/lib/stellar";
+import { useEscrowStore } from "@/store/escrowStore";
+import { useTransaction } from "@/hooks/useTransaction";
+import { Card } from "./Card";
+import { SkeletonLoader } from "./SkeletonLoader";
+import { RetryButton } from "./RetryButton";
 import { TransactionStatus } from "./TransactionStatus";
 
 const Scanner = dynamic(
@@ -20,16 +26,54 @@ const Scanner = dynamic(
   { ssr: false }
 );
 
+function getStatusLabel(escrow: EscrowState | null): string {
+  if (!escrow) return "";
+  return typeof escrow.status === "string" ? escrow.status : escrow.status.tag;
+}
+
 export function BuyerPanel() {
   const { address, sign } = useStellarWallet();
   const [mode, setMode] = useState<"manual" | "scan">("manual");
-  const [escrowId, setEscrowId] = useState("");
-  const [escrow, setEscrow] = useState<EscrowState | null>(null);
-  const [status, setStatus] = useState<
-    "idle" | "building" | "signing" | "submitting" | "success" | "error"
-  >("idle");
-  const [hash, setHash] = useState<string | undefined>(undefined);
-  const [error, setError] = useState<string | null>(null);
+  const [escrowIdInput, setEscrowIdInput] = useState("");
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
+  const [now, setNow] = useState<number>(0);
+
+  const escrowId = Number(escrowIdInput);
+  const escrow = useEscrowStore((s) =>
+    !Number.isNaN(escrowId) ? s.escrows[escrowId] : undefined
+  );
+  const pending = useEscrowStore((s) =>
+    !Number.isNaN(escrowId) ? s.pending[escrowId] : false
+  );
+  const { setEscrow, setPending, optimisticStatus } = useEscrowStore();
+
+  const tx = useTransaction(sign);
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setNow(Math.floor(Date.now() / 1000));
+    const interval = setInterval(
+      () => setNow(Math.floor(Date.now() / 1000)),
+      60_000
+    );
+    /* eslint-enable react-hooks/set-state-in-effect */
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadEscrow = async (id: number) => {
+    setLookupLoading(true);
+    setLookupError(null);
+    try {
+      const state = await getEscrowState(id);
+      setEscrow(id, state);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to load escrow";
+      setLookupError(msg);
+    } finally {
+      setLookupLoading(false);
+    }
+  };
 
   const handleScan = (result: Array<{ rawValue: string }> | undefined) => {
     const value = result?.[0]?.rawValue;
@@ -37,117 +81,87 @@ export function BuyerPanel() {
 
     const params = parseEscrowQrString(value);
     if (!params) {
-      setError("Invalid payment QR code");
+      setLookupError("Invalid payment QR code");
       return;
     }
 
-    setEscrowId(params.escrowId.toString());
+    setEscrowIdInput(params.escrowId.toString());
     setMode("manual");
-    setError(null);
+    setLookupError(null);
     void loadEscrow(params.escrowId);
-  };
-
-  const loadEscrow = async (id: number) => {
-    setEscrow(null);
-    try {
-      const state = await getEscrowState(id);
-      setEscrow(state);
-    } catch (err: unknown) {
-      console.error("Failed to load escrow:", err);
-    }
   };
 
   const handleLookup = async (e: React.FormEvent) => {
     e.preventDefault();
-    const id = Number(escrowId);
-    if (Number.isNaN(id) || id <= 0) {
-      setError("Invalid escrow ID");
+    if (Number.isNaN(escrowId) || escrowId <= 0) {
+      setLookupError("Invalid escrow ID");
       return;
     }
-    setError(null);
-    await loadEscrow(id);
+    setLookupError(null);
+    await loadEscrow(escrowId);
   };
 
-  const handleFund = async () => {
-    if (!address || !escrow) return;
-    const id = Number(escrowId);
-
-    setStatus("building");
-    setError(null);
-    setHash(undefined);
-
+  const runTransaction = async (
+    builder: () => Promise<string>,
+    optimisticTag?: string
+  ) => {
+    if (!address) return;
+    if (optimisticTag) optimisticStatus(escrowId, { tag: optimisticTag });
+    setPending(escrowId, true);
     try {
-      const xdr = await buildFundEscrowTx(address, id);
-      setStatus("signing");
-      const signedXdr = await sign(xdr);
-      setStatus("submitting");
-      const result = await submitSorobanTransaction(signedXdr);
-      setHash(result.hash);
-      setStatus("success");
-      await loadEscrow(id);
-    } catch (err: unknown) {
-      if (err instanceof Error && err.message.includes("rejected")) {
-        setError("Transaction was rejected in wallet.");
-      } else {
-        setError(parseContractError(err));
-      }
-      setStatus("error");
+      await tx.execute(builder);
+      await loadEscrow(escrowId);
+    } finally {
+      setPending(escrowId, false);
     }
   };
 
-  const handleRelease = async () => {
-    if (!address || !escrow) return;
-    const id = Number(escrowId);
+  const handleFund = () =>
+    runTransaction(() => buildFundEscrowTx(address!, escrowId), "Funded");
 
-    setStatus("building");
-    setError(null);
-    setHash(undefined);
+  const handleRelease = () =>
+    runTransaction(() => buildReleaseEscrowTx(address!, escrowId), "Released");
 
-    try {
-      const xdr = await buildReleaseEscrowTx(address, id);
-      setStatus("signing");
-      const signedXdr = await sign(xdr);
-      setStatus("submitting");
-      const result = await submitSorobanTransaction(signedXdr);
-      setHash(result.hash);
-      setStatus("success");
-      await loadEscrow(id);
-    } catch (err: unknown) {
-      if (err instanceof Error && err.message.includes("rejected")) {
-        setError("Transaction was rejected in wallet.");
-      } else {
-        setError(parseContractError(err));
-      }
-      setStatus("error");
-    }
-  };
+  const handleRefund = () =>
+    runTransaction(() => buildRefundEscrowTx(address!, escrowId), "Refunded");
 
-  const getStatusLabel = () => {
-    if (!escrow) return null;
-    const statusValue =
-      typeof escrow.status === "string" ? escrow.status : escrow.status.tag;
-    return statusValue;
-  };
+  const handleDispute = () =>
+    runTransaction(() => buildDisputeEscrowTx(address!, escrowId), "Disputed");
+
+  const handleResolve = (toSeller: boolean) =>
+    runTransaction(
+      () => buildResolveDisputeTx(address!, escrowId, toSeller),
+      "Resolved"
+    );
 
   if (!address) {
     return (
-      <div className="rounded-xl border border-zinc-200 bg-white p-6 text-center shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <Card className="text-center">
         <p className="text-zinc-600 dark:text-zinc-400">
           Connect your wallet to fund or release an escrow.
         </p>
-      </div>
+      </Card>
     );
   }
 
+  const statusLabel = getStatusLabel(escrow ?? null);
+  const isCreated = statusLabel === "Created";
+  const isFunded = statusLabel === "Funded";
+  const isDisputed = statusLabel === "Disputed";
+  const isBuyer = escrow?.buyer === address;
+  const isSeller = escrow?.seller === address;
+  const isArbitrator = escrow?.arbitrator === address;
+  const refundAvailable = isFunded && escrow && now >= escrow.timeout_at;
+
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <Card>
       <h2 className="mb-4 text-lg font-semibold">Pay via Escrow</h2>
 
       <div className="mb-4 flex gap-2">
         <button
           type="button"
           onClick={() => setMode("manual")}
-          className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+          className={`min-h-[44px] rounded-md px-3 py-1.5 text-sm font-medium ${
             mode === "manual"
               ? "bg-blue-600 text-white"
               : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300"
@@ -158,7 +172,7 @@ export function BuyerPanel() {
         <button
           type="button"
           onClick={() => setMode("scan")}
-          className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+          className={`min-h-[44px] rounded-md px-3 py-1.5 text-sm font-medium ${
             mode === "scan"
               ? "bg-blue-600 text-white"
               : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300"
@@ -173,7 +187,7 @@ export function BuyerPanel() {
           <Scanner
             onScan={handleScan}
             onError={(error: { message?: string }) =>
-              setError(error.message || "Camera error")
+              setLookupError(error.message || "Camera error")
             }
             styles={{
               container: { width: "100%", aspectRatio: "1 / 1" },
@@ -195,71 +209,119 @@ export function BuyerPanel() {
             type="number"
             min="1"
             required
-            value={escrowId}
+            value={escrowIdInput}
             onChange={(e) => {
-              setEscrowId(e.target.value);
-              setEscrow(null);
+              setEscrowIdInput(e.target.value);
+              setEscrow(Number(e.target.value), null);
             }}
             placeholder="1"
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800"
+            className="min-h-[44px] w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800"
           />
         </div>
 
         <button
           type="submit"
-          className="rounded-lg bg-zinc-800 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-900"
+          disabled={lookupLoading}
+          className="min-h-[44px] rounded-lg bg-zinc-800 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-900 disabled:opacity-50"
         >
-          Look Up Escrow
+          {lookupLoading ? "Looking up..." : "Look Up Escrow"}
         </button>
       </form>
+
+      {lookupLoading && !escrow && (
+        <div className="mt-4 space-y-2">
+          <SkeletonLoader className="h-4 w-3/4" />
+          <SkeletonLoader className="h-4 w-1/2" />
+        </div>
+      )}
+
+      {lookupError && (
+        <div className="mt-4 flex items-center justify-between gap-2 rounded-lg bg-red-50 p-3 text-xs text-red-700 dark:bg-red-950 dark:text-red-300">
+          <span>{lookupError}</span>
+          <RetryButton onRetry={() => loadEscrow(escrowId)} />
+        </div>
+      )}
 
       {escrow && (
         <div className="mt-4 rounded-lg border border-zinc-200 p-4 dark:border-zinc-700">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-sm font-medium">Status</span>
             <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-              {getStatusLabel()}
+              {statusLabel || "Unknown"}
             </span>
           </div>
-          <div className="space-y-1 text-sm">
+          <div className="space-y-1 text-sm break-all">
             <p>Seller: {escrow.seller}</p>
             <p>Buyer: {escrow.buyer}</p>
             <p>Amount: {stroopsToXlm(escrow.amount)} XLM</p>
             {escrow.memo && <p>Memo: {escrow.memo}</p>}
+            {escrow.timeout_at > 0 && (
+              <p>
+                Refund available after:{" "}
+                {new Date(escrow.timeout_at * 1000).toLocaleString()}
+              </p>
+            )}
           </div>
 
-          <div className="mt-4 flex gap-2">
+          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <button
               type="button"
               onClick={handleFund}
-              disabled={
-                status === "building" ||
-                status === "signing" ||
-                status === "submitting" ||
-                getStatusLabel() !== "Created"
-              }
-              className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              disabled={pending || !isCreated || !isBuyer}
+              className="min-h-[44px] rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
-              Fund Escrow
+              {pending && isCreated ? "Funding..." : "Fund Escrow"}
             </button>
             <button
               type="button"
               onClick={handleRelease}
-              disabled={
-                status === "building" ||
-                status === "signing" ||
-                status === "submitting" ||
-                getStatusLabel() !== "Funded"
-              }
-              className="flex-1 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+              disabled={pending || !isFunded || !isBuyer}
+              className="min-h-[44px] rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
             >
-              Release to Seller
+              {pending && isFunded ? "Releasing..." : "Release to Seller"}
+            </button>
+            <button
+              type="button"
+              onClick={handleDispute}
+              disabled={pending || !isFunded || (!isBuyer && !isSeller)}
+              className="min-h-[44px] rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+            >
+              {pending && isFunded ? "Disputing..." : "Dispute"}
+            </button>
+            <button
+              type="button"
+              onClick={handleRefund}
+              disabled={pending || !refundAvailable || !isBuyer}
+              className="min-h-[44px] rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              {pending && refundAvailable ? "Refunding..." : "Refund"}
             </button>
           </div>
+
+          {isDisputed && isArbitrator && (
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleResolve(true)}
+                disabled={pending}
+                className="min-h-[44px] rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                Resolve to Seller
+              </button>
+              <button
+                type="button"
+                onClick={() => handleResolve(false)}
+                disabled={pending}
+                className="min-h-[44px] rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                Resolve to Buyer
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      <TransactionStatus status={status} hash={hash} error={error} />
-    </div>
+      <TransactionStatus status={tx.status} hash={tx.hash} error={tx.error} />
+    </Card>
   );
 }

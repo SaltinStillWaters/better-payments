@@ -1,0 +1,7 @@
+pnpm lint-staged
+
+# Run Rust format and lint checks only when contract sources are staged.
+if git diff --cached --name-only | grep -q '^contract/.*\.rs$'; then
+  echo "Checking contract formatting and lints..."
+  (cd contract && cargo fmt --check && cargo clippy --all-targets -- -D warnings)
+fi

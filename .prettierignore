@@ -1,0 +1,10 @@
+.next/
+out/
+build/
+node_modules/
+coverage/
+contract/target/
+test_snapshots/
+pnpm-lock.yaml
+*.min.js
+*.wasm

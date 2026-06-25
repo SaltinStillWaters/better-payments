@@ -61,10 +61,7 @@ export async function buildPaymentTx(
 export async function submitTransaction(
   signedXdr: string
 ): Promise<SubmitResult> {
-  const transaction = TransactionBuilder.fromXDR(
-    signedXdr,
-    NETWORK_PASSPHRASE
-  );
+  const transaction = TransactionBuilder.fromXDR(signedXdr, NETWORK_PASSPHRASE);
 
   const result = await horizon.submitTransaction(transaction);
   const hash = result.hash;
@@ -145,10 +142,7 @@ export async function buildContractCall(
 export async function submitSorobanTransaction(
   signedXdr: string
 ): Promise<SorobanSubmitResult> {
-  const transaction = TransactionBuilder.fromXDR(
-    signedXdr,
-    NETWORK_PASSPHRASE
-  );
+  const transaction = TransactionBuilder.fromXDR(signedXdr, NETWORK_PASSPHRASE);
 
   const response = await sorobanRpc.sendTransaction(transaction);
 
@@ -179,13 +173,17 @@ export async function buildCreateEscrowTx(
   seller: string,
   buyer: string,
   amountXlm: string,
-  memo: string
+  memo: string,
+  arbitrator?: string
 ): Promise<string> {
   const args = [
     addressToScVal(seller),
     addressToScVal(buyer),
     nativeToScVal(xlmToStroops(amountXlm), { type: "i128" }),
     nativeToScVal(memo, { type: "string" }),
+    arbitrator
+      ? nativeToScVal(arbitrator, { type: "address" })
+      : nativeToScVal(null, { type: "address" }),
   ];
   return buildContractCall(source, "create_escrow", args);
 }
@@ -206,6 +204,35 @@ export async function buildReleaseEscrowTx(
   return buildContractCall(source, "release_escrow", args);
 }
 
+export async function buildRefundEscrowTx(
+  source: string,
+  id: number
+): Promise<string> {
+  const args = [nativeToScVal(id, { type: "u64" })];
+  return buildContractCall(source, "refund_escrow", args);
+}
+
+export async function buildDisputeEscrowTx(
+  source: string,
+  id: number
+): Promise<string> {
+  const args = [addressToScVal(source), nativeToScVal(id, { type: "u64" })];
+  return buildContractCall(source, "dispute_escrow", args);
+}
+
+export async function buildResolveDisputeTx(
+  source: string,
+  id: number,
+  toSeller: boolean
+): Promise<string> {
+  const args = [
+    addressToScVal(source),
+    nativeToScVal(id, { type: "u64" }),
+    nativeToScVal(toSeller),
+  ];
+  return buildContractCall(source, "resolve_dispute", args);
+}
+
 export interface EscrowState {
   id: number;
   seller: string;
@@ -214,6 +241,8 @@ export interface EscrowState {
   memo: string;
   status: { tag: string; values?: unknown[] } | string;
   created_at: number;
+  timeout_at: number;
+  arbitrator?: string | null;
 }
 
 export async function getEscrowState(id: number): Promise<EscrowState | null> {
@@ -222,9 +251,7 @@ export async function getEscrowState(id: number): Promise<EscrowState | null> {
 
   // Build a read-only transaction using a throwaway source account.
   // The account only needs a valid format; it does not need to exist for simulation.
-  const kp = StrKey.encodeEd25519PublicKey(
-    Buffer.alloc(32)
-  ) as string;
+  const kp = StrKey.encodeEd25519PublicKey(Buffer.alloc(32)) as string;
   const account = await sorobanRpc.getAccount(kp).catch(() => ({
     accountId: () => kp,
     sequenceNumber: "0",
@@ -259,6 +286,8 @@ export async function getEscrowState(id: number): Promise<EscrowState | null> {
       memo: native.memo as string,
       status: native.status as EscrowState["status"],
       created_at: Number(native.created_at),
+      timeout_at: Number(native.timeout_at ?? 0),
+      arbitrator: (native.arbitrator as string | null) ?? null,
     };
   }
 
@@ -284,8 +313,29 @@ export function parseContractError(error: unknown): string {
     if (message.includes("AlreadyReleased")) {
       return "This escrow has already been released.";
     }
+    if (message.includes("AlreadyRefunded")) {
+      return "This escrow has already been refunded.";
+    }
     if (message.includes("NotFunded")) {
       return "This escrow must be funded before it can be released.";
+    }
+    if (message.includes("RefundNotAvailable")) {
+      return "Refund is not available for this escrow.";
+    }
+    if (message.includes("AlreadyDisputed")) {
+      return "This escrow is already under dispute.";
+    }
+    if (message.includes("NotDisputed")) {
+      return "This escrow is not under dispute.";
+    }
+    if (message.includes("ContractPaused")) {
+      return "The escrow contract is currently paused.";
+    }
+    if (message.includes("NotInitialized")) {
+      return "The escrow contract has not been initialized.";
+    }
+    if (message.includes("AlreadyInitialized")) {
+      return "The escrow contract has already been initialized.";
     }
     if (message.includes("Simulation failed")) {
       return message.replace("Simulation failed: ", "");

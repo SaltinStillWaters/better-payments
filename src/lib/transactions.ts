@@ -268,7 +268,9 @@ function parseStatusValue(status: unknown): EscrowState["status"] {
   if (typeof status === "object" && status !== null) {
     const tag = (status as { tag?: unknown }).tag;
     const values = (status as { values?: unknown }).values;
-    if (typeof tag === "string") return { tag, values };
+    if (typeof tag === "string") {
+      return { tag, values: Array.isArray(values) ? values : undefined };
+    }
   }
   return "";
 }

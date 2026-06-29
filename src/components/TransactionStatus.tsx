@@ -12,12 +12,16 @@ interface TransactionStatusProps {
   status: TransactionStatus;
   hash?: string;
   error?: string | null;
+  successMessage?: string;
+  errorMessage?: string;
 }
 
 export function TransactionStatus({
   status,
   hash,
   error,
+  successMessage = "Transaction submitted successfully!",
+  errorMessage = "Transaction failed",
 }: TransactionStatusProps) {
   if (status === "idle") return null;
 
@@ -52,7 +56,7 @@ export function TransactionStatus({
         <div className="flex flex-col gap-1 text-emerald-700 dark:text-emerald-400">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-            Payment sent successfully!
+            {successMessage}
           </div>
           <a
             href={`https://stellar.expert/explorer/testnet/tx/${hash}`}
@@ -69,7 +73,7 @@ export function TransactionStatus({
         <div className="flex flex-col gap-1 text-red-600 dark:text-red-400">
           <div className="flex items-center gap-2">
             <XCircle className="h-4 w-4" aria-hidden="true" />
-            Payment failed
+            {errorMessage}
           </div>
           {error && <p className="text-xs">{error}</p>}
         </div>

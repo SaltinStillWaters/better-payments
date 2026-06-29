@@ -14,6 +14,13 @@ The Soroban escrow contract source lives in [`contracts/src/lib.rs`](contracts/s
 
 This ID is also set as `NEXT_PUBLIC_ESCROW_CONTRACT_ID` in `.env.local.example`. To deploy your own build (e.g. after editing the contract or following a testnet reset), run `pnpm contract:deploy` — see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — which redeploys, runs `initialize`, and rewrites this ID in `.env.local`.
 
+### Verified contract call
+
+A sample escrow contract invocation on Testnet:
+
+- **Transaction hash**: `a2c40fddb39a183b85831682fe4e94e2ca3095ee4f6fade62d21649490419225`
+- **Stellar Expert**: https://stellar.expert/explorer/testnet/tx/a2c40fddb39a183b85831682fe4e94e2ca3095ee4f6fade62d21649490419225
+
 ## Features
 
 - **Multi-wallet support**: Freighter, LOBSTR, xBull, and Albedo (via Stellar Wallets Kit), with silent reconnect persisted across sessions.

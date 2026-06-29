@@ -87,7 +87,7 @@ describe("BuyerPanel", () => {
       buyer: "GBUYER",
       amount: 100000000n,
       memo: "test",
-      status: { tag: "Created" },
+      status: ["Created"],
       timeout_at: 0,
       arbitrator: undefined,
     } as never);

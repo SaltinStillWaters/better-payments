@@ -245,6 +245,34 @@ export interface EscrowState {
   arbitrator?: string | null;
 }
 
+function getNativeField<T>(native: unknown, key: string): T | undefined {
+  if (native instanceof Map) {
+    return native.get(key) as T | undefined;
+  }
+  if (typeof native === "object" && native !== null) {
+    return (native as Record<string, unknown>)[key] as T | undefined;
+  }
+  return undefined;
+}
+
+function parseStatusValue(status: unknown): EscrowState["status"] {
+  if (typeof status === "string") return status;
+  if (Array.isArray(status)) {
+    const tag = status[0];
+    if (typeof tag === "string") return { tag, values: status.slice(1) };
+  }
+  if (status instanceof Map) {
+    const tag = status.get("tag");
+    if (typeof tag === "string") return { tag, values: status.get("values") };
+  }
+  if (typeof status === "object" && status !== null) {
+    const tag = (status as { tag?: unknown }).tag;
+    const values = (status as { values?: unknown }).values;
+    if (typeof tag === "string") return { tag, values };
+  }
+  return "";
+}
+
 export async function getEscrowState(id: number): Promise<EscrowState | null> {
   const contract = getContract();
   const args = [nativeToScVal(id, { type: "u64" })];
@@ -272,22 +300,23 @@ export async function getEscrowState(id: number): Promise<EscrowState | null> {
     simulation.result &&
     simulation.result.retval
   ) {
-    const native = scValToNative(simulation.result.retval) as Record<
-      string,
-      unknown
-    > | null;
+    const native = scValToNative(simulation.result.retval) as
+      | Record<string, unknown>
+      | Map<string, unknown>
+      | null;
     if (!native) return null;
 
     return {
-      id: Number(native.id),
-      seller: native.seller as string,
-      buyer: native.buyer as string,
-      amount: (native.amount as bigint).toString(),
-      memo: native.memo as string,
-      status: native.status as EscrowState["status"],
-      created_at: Number(native.created_at),
-      timeout_at: Number(native.timeout_at ?? 0),
-      arbitrator: (native.arbitrator as string | null) ?? null,
+      id: Number(getNativeField<unknown>(native, "id")),
+      seller: getNativeField<string>(native, "seller") ?? "",
+      buyer: getNativeField<string>(native, "buyer") ?? "",
+      amount: String(getNativeField<bigint | string>(native, "amount") ?? 0),
+      memo: getNativeField<string>(native, "memo") ?? "",
+      status: parseStatusValue(getNativeField<unknown>(native, "status")),
+      created_at: Number(getNativeField<unknown>(native, "created_at") ?? 0),
+      timeout_at: Number(getNativeField<unknown>(native, "timeout_at") ?? 0),
+      arbitrator:
+        (getNativeField<string | null>(native, "arbitrator") ?? null) || null,
     };
   }
 

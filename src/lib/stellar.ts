@@ -1,7 +1,6 @@
 import { Horizon, Networks, rpc } from "@stellar/stellar-sdk";
 
-function requireEnv(name: string): string {
-  const value = process.env[name];
+function requireEnv(name: string, value: string | undefined): string {
   if (!value) {
     throw new Error(
       `Missing required environment variable: ${name}. See .env.local.example`
@@ -33,9 +32,13 @@ export const TOKEN_ADDRESS =
   "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
 
 // Validate required public env vars at module load so the app fails fast.
+// Access the variable directly (not via dynamic key) so Turbopack inlines it.
 if (typeof window !== "undefined") {
   // Only validate in the browser; build-time should not require them.
-  requireEnv("NEXT_PUBLIC_ESCROW_CONTRACT_ID");
+  requireEnv(
+    "NEXT_PUBLIC_ESCROW_CONTRACT_ID",
+    process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ID
+  );
 }
 
 export const horizon = new Horizon.Server(HORIZON_URL, {

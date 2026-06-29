@@ -176,7 +176,13 @@ export function SellerPanel() {
         </button>
       </form>
 
-      <TransactionStatus status={status} hash={hash} error={txError} />
+      <TransactionStatus
+        status={status}
+        hash={hash}
+        error={txError}
+        successMessage="Escrow created"
+        errorMessage="Failed to create escrow"
+      />
 
       {qrValue && (
         <div className="mt-6 flex flex-col items-center gap-3">

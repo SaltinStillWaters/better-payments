@@ -28,7 +28,11 @@ const Scanner = dynamic(
 
 function getStatusLabel(escrow: EscrowState | null): string {
   if (!escrow) return "";
-  return typeof escrow.status === "string" ? escrow.status : escrow.status.tag;
+  const { status } = escrow;
+  if (typeof status === "string") return status;
+  if (Array.isArray(status)) return String(status[0] ?? "");
+  if (status && typeof status === "object") return status.tag ?? "";
+  return "";
 }
 
 export function BuyerPanel() {
@@ -38,6 +42,13 @@ export function BuyerPanel() {
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [now, setNow] = useState<number>(0);
+  const [txMessage, setTxMessage] = useState<{
+    success: string;
+    error: string;
+  }>({
+    success: "Transaction submitted successfully!",
+    error: "Transaction failed",
+  });
 
   const escrowId = Number(escrowIdInput);
   const escrow = useEscrowStore((s) =>
@@ -103,9 +114,11 @@ export function BuyerPanel() {
 
   const runTransaction = async (
     builder: () => Promise<string>,
-    optimisticTag?: string
+    optimisticTag?: string,
+    messages?: { success: string; error: string }
   ) => {
     if (!address) return;
+    if (messages) setTxMessage(messages);
     if (optimisticTag) optimisticStatus(escrowId, { tag: optimisticTag });
     setPending(escrowId, true);
     try {
@@ -117,21 +130,39 @@ export function BuyerPanel() {
   };
 
   const handleFund = () =>
-    runTransaction(() => buildFundEscrowTx(address!, escrowId), "Funded");
+    runTransaction(() => buildFundEscrowTx(address!, escrowId), "Funded", {
+      success: "Escrow funded",
+      error: "Failed to fund escrow",
+    });
 
   const handleRelease = () =>
-    runTransaction(() => buildReleaseEscrowTx(address!, escrowId), "Released");
+    runTransaction(() => buildReleaseEscrowTx(address!, escrowId), "Released", {
+      success: "Funds released to seller",
+      error: "Failed to release funds",
+    });
 
   const handleRefund = () =>
-    runTransaction(() => buildRefundEscrowTx(address!, escrowId), "Refunded");
+    runTransaction(() => buildRefundEscrowTx(address!, escrowId), "Refunded", {
+      success: "Escrow refunded",
+      error: "Failed to refund escrow",
+    });
 
   const handleDispute = () =>
-    runTransaction(() => buildDisputeEscrowTx(address!, escrowId), "Disputed");
+    runTransaction(() => buildDisputeEscrowTx(address!, escrowId), "Disputed", {
+      success: "Escrow disputed",
+      error: "Failed to dispute escrow",
+    });
 
   const handleResolve = (toSeller: boolean) =>
     runTransaction(
       () => buildResolveDisputeTx(address!, escrowId, toSeller),
-      "Resolved"
+      "Resolved",
+      {
+        success: toSeller
+          ? "Dispute resolved to seller"
+          : "Dispute resolved to buyer",
+        error: "Failed to resolve dispute",
+      }
     );
 
   if (!address) {
@@ -321,7 +352,13 @@ export function BuyerPanel() {
         </div>
       )}
 
-      <TransactionStatus status={tx.status} hash={tx.hash} error={tx.error} />
+      <TransactionStatus
+        status={tx.status}
+        hash={tx.hash}
+        error={tx.error}
+        successMessage={txMessage.success}
+        errorMessage={txMessage.error}
+      />
     </Card>
   );
 }

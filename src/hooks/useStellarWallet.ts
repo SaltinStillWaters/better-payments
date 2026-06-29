@@ -33,6 +33,7 @@ export function useStellarWallet(): UseStellarWalletReturn {
   const [ready, setReady] = useState(false);
   const [localLoading, setLocalLoading] = useState(false);
   const initStarted = useRef(false);
+  const reconnectStarted = useRef(false);
 
   // Lazy-init the wallets kit once on the client to avoid SSR issues.
   useEffect(() => {
@@ -84,12 +85,15 @@ export function useStellarWallet(): UseStellarWalletReturn {
 
     return () => {
       cancelled = true;
+      initStarted.current = false;
     };
   }, [walletType, setError]);
 
   // Attempt a silent reconnect when the kit is ready and we have a persisted wallet.
   useEffect(() => {
     if (!ready || !autoReconnect || connected || !address) return;
+    if (reconnectStarted.current) return;
+    reconnectStarted.current = true;
 
     let cancelled = false;
 

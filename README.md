@@ -45,6 +45,10 @@ A sample escrow contract invocation on Testnet:
 
 <img width="1574" height="747" alt="image" src="https://github.com/user-attachments/assets/ac585424-372a-4a83-9e44-0f701b43525c" />
 
+## Test Screenshot
+
+<img width="966" height="392" alt="image" src="https://github.com/user-attachments/assets/49e4165b-3d4c-434e-bcfe-81a79cae8268" />
+
 ## Documentation
 
 | Doc                                          | Contents                                                             |

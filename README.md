@@ -31,6 +31,9 @@ A sample escrow contract invocation on Testnet:
 - **Tested**: 16 Rust contract tests + fuzz target, and a Vitest/Testing-Library frontend suite.
 - **CI/CD**: GitHub Actions for tests/build, a deploy workflow, a local deploy script, Docker, and pre-commit hooks.
 
+## Wallet Options Screenshot
+<img width="1167" height="763" alt="image" src="https://github.com/user-attachments/assets/ad24624f-bd91-4fba-9220-85e81794e521" />
+
 ## Documentation
 
 | Doc                                          | Contents                                                             |

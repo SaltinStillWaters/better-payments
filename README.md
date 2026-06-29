@@ -41,6 +41,9 @@ A sample escrow contract invocation on Testnet:
 <img width="781" height="856" alt="image" src="https://github.com/user-attachments/assets/b0a8a9e3-8140-4f59-9a96-6c46271f43e7" />
 <img width="1451" height="860" alt="image" src="https://github.com/user-attachments/assets/aa266746-1ff3-4255-8e12-a1b156f077ed" />
 
+## CI/CD pipeline Screenshot
+
+<img width="1574" height="747" alt="image" src="https://github.com/user-attachments/assets/ac585424-372a-4a83-9e44-0f701b43525c" />
 
 ## Documentation
 
